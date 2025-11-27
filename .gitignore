@@ -1,0 +1,16 @@
+# Variables d'environnement
+.env
+.env.local
+
+# Données
+mes_pdfs/*.pdf
+raw_data_json/
+chroma_db_local/
+__pycache__/
+*.pyc
+.venv/
+scraping_history.json
+
+# IDE
+.vscode/
+.idea/
