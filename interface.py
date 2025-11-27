@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from main import DevChatBot  # On importe ta classe existante
+from main import DevChatBot
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(
@@ -10,13 +10,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Titre et Sous-titre
 st.title("🤖 DevRAG Assistant")
 st.markdown("### Expert Programmation")
 
-# --- INITIALISATION (CACHING) ---
-# Cette fonction ne s'exécute qu'une seule fois grâce au cache de Streamlit.
-# Cela évite de recharger ChromaDB à chaque interaction.
+# --- INITIALISATION ---
 @st.cache_resource
 def load_bot():
     if not os.path.exists("./chroma_db_local"):
@@ -26,24 +23,29 @@ def load_bot():
 
 bot = load_bot()
 
-# --- GESTION DE L'HISTORIQUE (SESSION STATE) ---
-# Si l'historique n'existe pas encore dans la session, on le crée
+# --- HISTORIQUE ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Bonjour ! Je suis prêt à répondre à tes questions sur Programmation."}
+        {"role": "assistant", "content": "Bonjour ! Je suis prêt à répondre à tes questions sur la programmation."}
     ]
 
-# --- BARRE LATÉRALE (SIDEBAR) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("📚 Base de Connaissances")
-    st.info(f"Les réponses sont générées par **Gemini Pro** (ou Ollama) via RAG.")
+    st.info(f"Moteur : Ollama (Local) via RAG.")
     
     st.markdown("---")
     st.write("Sources disponibles :")
-    # On peut lister les fichiers si tu veux, ici juste un indicateur
+    
     if os.path.exists("./mes_pdfs"):
-        pdf_count = len([f for f in os.listdir("./mes_pdfs") if f.endswith(".pdf")])
-        st.success(f"📄 {pdf_count} Fichiers PDF")
+        files = os.listdir("./mes_pdfs")
+        pdf_count = len([f for f in files if f.endswith(".pdf")])
+        epub_count = len([f for f in files if f.endswith(".epub")])
+        
+        if pdf_count > 0:
+            st.success(f"📄 {pdf_count} Fichiers PDF")
+        if epub_count > 0:
+            st.success(f"📖 {epub_count} Livres EPUB")
     
     if os.path.exists("./scraping_history.json"):
         st.success(f"🌐 Documentation Web indexée")
@@ -53,30 +55,22 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# --- AFFICHAGE DE LA CONVERSATION ---
-# On ré-affiche tous les messages précédents à chaque rechargement de page
+# --- CHAT UI ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- GESTION DE L'ENTRÉE UTILISATEUR ---
 if prompt := st.chat_input("Posez votre question technique ici..."):
-    # 1. Afficher le message de l'utilisateur
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. Générer la réponse du bot
     if bot:
         with st.chat_message("assistant"):
-            # On utilise un spinner pendant le calcul
-            with st.spinner("Analyse des documents en cours..."):
+            with st.spinner("Analyse des documents..."):
                 try:
-                    # Appel à ta classe main.py
                     response = bot.ask(prompt)
                     st.markdown(response)
-                    
-                    # 3. Sauvegarder la réponse dans l'historique
                     st.session_state.messages.append({"role": "assistant", "content": response})
                 except Exception as e:
-                    st.error(f"Une erreur est survenue : {e}")
+                    st.error(f"Erreur : {e}")

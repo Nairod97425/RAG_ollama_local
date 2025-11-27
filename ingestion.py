@@ -4,6 +4,9 @@ import json
 import re
 import warnings
 import concurrent.futures
+import ebooklib
+
+from ebooklib import epub
 from urllib.parse import urlparse, urljoin
 
 from bs4 import XMLParsedAsHTMLWarning
@@ -130,10 +133,7 @@ class DataIngestor:
         if not base_path.endswith("/"): base_path += "/"
         
         # --- CRÉATION DU FILTRE REGEX ---
-        # On échappe les caractères spéciaux pour que la regex soit valide
         safe_base_path = re.escape(base_path)
-        # La regex dit : "Le lien doit contenir exactement ce chemin"
-        # Cela empêchera le robot d'aller sur /zh-CN/ ou /en-US/
         link_filter = f".*{safe_base_path}.*"
 
         loader = RecursiveUrlLoader(
@@ -141,8 +141,8 @@ class DataIngestor:
             max_depth=3,
             extractor=self._discovery_extractor,
             prevent_outside=True,
-            timeout=20, # On augmente le temps (20s)
-            link_regex=link_filter, # <-- LA PROTECTION MAGIQUE
+            timeout=20, 
+            link_regex=link_filter,
             check_response_status=True
         )
         
@@ -151,14 +151,12 @@ class DataIngestor:
             found_urls = set()
             for d in docs:
                 url = d.metadata['source']
-                # Double vérification de sécurité
                 if base_path in url and "print" not in url and "history" not in url:
                     found_urls.add(url)
             
             return list(found_urls)
 
         except Exception as e:
-            # Si ça plante partiellement, on log mais on continue avec ce qu'on a trouvé
             print(f"⚠️ Avertissement Cartographie (scan partiel) : {e}")
             return [root_url]
 
@@ -202,9 +200,54 @@ class DataIngestor:
         print(f"✅ Terminé : {len(results)} pages ajoutées.")
         return results
 
-    def process_documents(self, pdf_paths: List[str], root_urls: List[str] = [], depth: int = 2) -> List[Document]:
+    # --- NOUVELLE MÉTHODE POUR EPUB ---
+    def load_epubs(self, epub_paths: List[str]) -> List[Document]:
+        docs = []
+        new_epubs = [p for p in epub_paths if p not in self.processed_sources]
+        
+        if not new_epubs: return []
+
+        print(f"📚 Chargement de {len(new_epubs)} nouveaux EPUBs...")
+        
+        for path in new_epubs:
+            if os.path.exists(path):
+                try:
+                    book = epub.read_epub(path)
+                    book_content = []
+                    
+                    for item in book.get_items():
+                        if item.get_type() == ebooklib.ITEM_DOCUMENT:
+                            html_content = item.get_content().decode('utf-8')
+                            text = self._smart_extractor(html_content)
+                            if text.strip():
+                                book_content.append(text)
+                    
+                    full_text = "\n\n".join(book_content)
+                    
+                    if full_text:
+                        doc = Document(
+                            page_content=full_text,
+                            metadata={"source": path, "source_type": "epub"}
+                        )
+                        docs.append(doc)
+                        self.processed_sources.add(path)
+                        
+                except Exception as e:
+                    print(f"⚠️ Erreur EPUB {path}: {e}")
+        
+        self._save_history()
+        return docs
+
+    def process_documents(self, pdf_paths: List[str] = [], epub_paths: List[str] = [], root_urls: List[str] = [], depth: int = 2) -> List[Document]:
         all_docs = []
+        
+        # 1. PDFs
         if pdf_paths: all_docs.extend(self.load_pdfs(pdf_paths))
+        
+        # 2. EPUBs
+        if epub_paths: all_docs.extend(self.load_epubs(epub_paths))
+        
+        # 3. Web
         for url in root_urls:
             web_docs = self.scrape_parallel(url, max_workers=10)
             if web_docs:

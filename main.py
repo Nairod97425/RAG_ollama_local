@@ -2,7 +2,6 @@ import os
 import sys
 from dotenv import load_dotenv
 
-# Plus besoin d'importer DataIngestor ici !
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
@@ -16,17 +15,16 @@ class DevChatBot:
         self.persist_directory = persist_directory
         print("🔧 Chargement du ChatBot...")
 
-        # 1. Configuration LLM (Cerveau)
-        self.llm = ChatOllama(model="llama3.2", temperature=0) #
+        # 1. Configuration LLM
+        self.llm = ChatOllama(model="llama3.2", temperature=0)
         
-        # 2. Configuration Embeddings (Mémoire)
-        # Indispensable pour "comprendre" les questions de la même façon que les documents
+        # 2. Configuration Embeddings
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
         
         self.vectorstore = None
         self.retriever = None
         
-        # 3. Chargement de la base existante
+        # 3. Chargement de la base
         if os.path.exists(self.persist_directory) and os.listdir(self.persist_directory):
             self.vectorstore = Chroma(
                 persist_directory=self.persist_directory, 
@@ -40,16 +38,15 @@ class DevChatBot:
             sys.exit(1)
 
     def _setup_retriever(self):
-        # Configuration de la recherche
         self.retriever = self.vectorstore.as_retriever(
             search_type="mmr", 
             search_kwargs={"k": 7, "lambda_mult": 0.5} 
         )
 
     def ask(self, question: str):
-        # Prompt strict pour développeur
-        template = """Tu es un assistant technique spécialisé EXCLUSIVEMENT sur la programmation, mais uniquement sur les information fornis e pdf et srapping.
-        Ta mission est d'aider les utilisateurs uniquement sur ce sujet à partir des documents fournis.
+        # Prompt corrigé
+        template = """Tu es un assistant technique spécialisé EXCLUSIVEMENT sur la programmation.
+        Ta mission est d'aider les utilisateurs uniquement sur ce sujet à partir des documents fournis (PDF, EPUB, Scraping).
 
         RÈGLES STRICTES :
         1. 🚫 HORS SUJET : Si la question ne concerne pas la programmation, refuse poliment.
@@ -87,12 +84,10 @@ class DevChatBot:
     def _format_docs(self, docs):
         return "\n\n".join(f"- {doc.page_content}" for doc in docs)
 
-# --- Boucle de Chat Interactive ---
-
 if __name__ == "__main__":
     bot = DevChatBot()
 
-    print("\n💬 Bienvenue ! Posez vos questions sur la documentation Python (tapez 'exit' pour quitter).")
+    print("\n💬 Bienvenue ! Posez vos questions sur la documentation (tapez 'exit' pour quitter).")
     
     while True:
         user_input = input("\n👤 Vous : ")
